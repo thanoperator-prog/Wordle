@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wordle Pro - Vacation Stakes</title>
+    <title>Wordle - Tournament Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
     <style>
         :root {
             --color-correct: #10b981;
@@ -15,6 +15,7 @@
             --glass: rgba(255, 255, 255, 0.03);
             --glass-border: rgba(255, 255, 255, 0.08);
             --accent: #3b82f6;
+            --gold: #f59e0b;
         }
 
         body {
@@ -38,6 +39,12 @@
             z-index: 100;
         }
 
+        .hint-banner {
+            background: rgba(59, 130, 246, 0.1);
+            border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+            transition: all 0.5s ease;
+        }
+
         .tile {
             width: clamp(48px, 9vw, 64px);
             height: clamp(48px, 9vw, 64px);
@@ -54,30 +61,14 @@
             color: white;
         }
 
-        .tile.space-tile {
-            border: none;
-            background: rgba(255, 255, 255, 0.05);
-            opacity: 0.2;
-        }
-
-        .tile[data-state="active"] {
-            border-color: var(--accent);
-            transform: scale(1.05);
-            background: rgba(59, 130, 246, 0.05);
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
-        }
-
-        @keyframes flip {
-            0% { transform: rotateX(0); }
-            50% { transform: rotateX(90deg); }
-            100% { transform: rotateX(0); }
-        }
-
-        .flip { animation: flip 0.6s ease; }
-
+        .tile.space-tile { border: none; background: rgba(255, 255, 255, 0.05); opacity: 0.2; }
+        .tile[data-state="active"] { border-color: var(--accent); transform: scale(1.05); background: rgba(59, 130, 246, 0.05); box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
         .tile.correct { background: var(--color-correct); border-color: var(--color-correct); }
         .tile.present { background: var(--color-present); border-color: var(--color-present); }
         .tile.absent { background: var(--color-absent); border-color: var(--color-absent); color: #94a3b8; }
+
+        @keyframes flip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+        .flip { animation: flip 0.6s ease; }
 
         .key {
             background: rgba(255, 255, 255, 0.06);
@@ -96,7 +87,6 @@
         }
 
         .key:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }
-        .key:active { transform: translateY(0) scale(0.95); }
         .key.correct { background: var(--color-correct); border-color: var(--color-correct); }
         .key.present { background: var(--color-present); border-color: var(--color-present); }
         .key.absent { background: #18181b; color: #52525b; border-color: transparent; }
@@ -111,504 +101,628 @@
             gap: 10px;
         }
 
-        #timer-display {
-            font-variant-numeric: tabular-nums;
-            font-weight: 700;
-            letter-spacing: -0.05em;
+        #powerup-container {
+            position: fixed;
+            left: 20px;
+            bottom: 120px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 40;
         }
 
-        #reveal-overlay, #win-overlay, #preview-overlay {
+        .powerup-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #18181b;
+            border: 2px solid #27272a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            filter: grayscale(1);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .powerup-btn.ready { filter: grayscale(0); opacity: 1; pointer-events: auto; border-color: #3b82f6; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+
+        .full-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(7, 7, 10, 0.95);
+            background: rgba(7, 7, 10, 0.97);
             backdrop-filter: blur(20px);
             z-index: 500;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
+            overflow-y: auto;
+            padding: 20px;
         }
 
-        .reveal-word {
-            font-size: clamp(3.5rem, 15vw, 7rem);
-            font-weight: 900;
-            background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.4));
-        }
-
-        #toast {
-            position: fixed;
-            top: 2rem;
-            left: 50%;
-            transform: translateX(-50%) translateY(-20px);
-            background: rgba(255, 255, 255, 0.95);
-            color: #000;
-            padding: 12px 24px;
-            border-radius: 16px;
-            font-weight: 700;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-            z-index: 1000;
-            opacity: 0;
-            pointer-events: none;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        #toast.visible {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        .stakes-card {
-            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(239, 68, 68, 0.1));
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            padding: 10px 16px;
-            border-radius: 16px;
-            box-shadow: 0 0 20px rgba(245, 158, 11, 0.1);
+        /* UPGRADED VACATION PASS CARD */
+        .vacation-pass-container {
+            perspective: 1000px;
+            width: 100%;
+            max-width: 440px;
+            filter: drop-shadow(0 25px 50px rgba(0,0,0,0.5));
         }
 
         .vacation-pass {
-            background: white;
-            color: black;
-            padding: 2.5rem;
+            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+            color: #0f172a;
             border-radius: 24px;
-            width: 90%;
-            max-width: 440px;
-            position: relative;
             overflow: hidden;
-            border: 5px dashed #cbd5e1;
-            text-align: left;
-            transform: rotate(-1deg);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            transform: rotateX(10deg) rotateY(-5deg);
+            animation: cardEntrance 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
 
-        .vacation-pass::before {
-            content: 'TOP SECRET';
+        @keyframes cardEntrance {
+            from { opacity: 0; transform: translateY(50px) rotateX(20deg); }
+            to { opacity: 1; transform: translateY(0) rotateX(10deg) rotateY(-5deg); }
+        }
+
+        .pass-cutout {
             position: absolute;
-            top: 10px;
-            right: -30px;
-            background: #ef4444;
+            width: 30px;
+            height: 30px;
+            background: rgba(7, 7, 10, 1);
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+        .cutout-left { left: -15px; }
+        .cutout-right { right: -15px; }
+
+        .pass-header {
+            background: #0f172a;
             color: white;
-            padding: 5px 40px;
-            font-size: 10px;
-            font-weight: 900;
-            transform: rotate(45deg);
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        @media (max-width: 640px) {
-            .key { height: 48px; border-radius: 8px; font-size: 0.8rem; }
-            .tile { border-radius: 12px; }
+        .pass-body {
+            padding: 1.5rem;
+            position: relative;
         }
+
+        .pass-divider {
+            border-top: 2px dashed #cbd5e1;
+            margin: 0.5rem 0;
+            position: relative;
+        }
+
+        .barcode {
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -2px;
+            font-size: 2.5rem;
+            line-height: 1;
+            opacity: 0.8;
+            user-select: none;
+        }
+
+        .tourney-banner {
+            background: linear-gradient(90deg, #6b21a8, #c026d3);
+            box-shadow: 0 0 20px rgba(192, 38, 211, 0.4);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
     </style>
 </head>
 <body>
 
     <header class="py-4 px-6 sticky top-0">
         <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 items-center gap-4">
-            <!-- Left: Controls -->
-            <div class="flex items-center gap-3 justify-center lg:justify-start">
-                <button id="custom-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl text-[10px] transition-all shadow-lg shadow-blue-600/20 active:scale-95">
-                    CREATE CHALLENGE
-                </button>
-                <button id="preview-prize-btn" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold px-4 py-2 rounded-xl text-[10px] transition-all border border-white/5">
-                    PREVIEW PRIZE
-                </button>
+            <div class="flex items-center gap-2 justify-center lg:justify-start">
+                <button id="custom-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-2 rounded-xl text-[10px] transition-all">1v1 MODE</button>
+                <button id="tournament-btn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3 py-2 rounded-xl text-[10px] transition-all">TOURNAMENT</button>
             </div>
             
-            <!-- Center: Title -->
-            <div class="text-center">
+            <div class="text-center flex flex-col items-center">
                 <h1 class="text-2xl font-black tracking-tight flex items-center justify-center gap-2">
                     <span class="bg-blue-600 px-2 py-0.5 rounded-lg text-white">W</span>
-                    <span class="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">ORDLE.PRO</span>
+                    <span class="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent uppercase">Wordle</span>
                 </h1>
+                <div id="active-tourney-badge" class="hidden tourney-banner text-white text-[9px] uppercase tracking-[0.2em] px-3 py-1 rounded-full font-black mt-1">
+                    ACTIVE MATCH
+                </div>
             </div>
 
-            <!-- Right: Stakes & Timer -->
             <div class="flex justify-center lg:justify-end gap-3 items-center">
-                <div class="stakes-card hidden sm:flex flex-col">
-                    <span class="text-[9px] font-black text-amber-500 uppercase tracking-widest">Active Stakes</span>
-                    <span class="text-[11px] font-bold text-white">1x Automatic Leave Pass</span>
-                </div>
                 <div id="timer-container">
                     <div class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                    <div id="timer-display" class="text-lg">05:00</div>
+                    <div id="timer-display" class="text-lg font-bold">05:00</div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Clues row -->
-        <div id="clue-container" class="max-w-5xl mx-auto flex flex-wrap justify-center gap-3 mt-4">
-            <div id="clue1-row" class="hidden flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-xl">
-                <span class="bg-blue-600 text-[10px] font-black px-2 py-0.5 rounded text-white uppercase">Clue 1</span>
-                <span id="clue1-text" class="text-sm font-semibold text-blue-200"></span>
-            </div>
-            <div id="clue2-row" class="hidden flex items-center gap-2 bg-purple-500/10 border border-purple-500/20 px-3 py-1.5 rounded-xl">
-                <span class="bg-purple-600 text-[10px] font-black px-2 py-0.5 rounded text-white uppercase">Panic Clue</span>
-                <span id="clue2-text" class="text-sm font-semibold text-purple-200"></span>
             </div>
         </div>
     </header>
 
-    <!-- Win Overlay -->
-    <div id="win-overlay">
-        <div class="p-8 animate-in fade-in zoom-in duration-500 flex flex-col items-center">
-            <div class="text-emerald-400 text-6xl mb-4 animate-bounce">🏆</div>
-            <h2 class="text-5xl font-black mb-2 italic tracking-tighter text-white">EARNED!</h2>
-            <p class="text-zinc-400 mb-8 font-medium">Your request for freedom has been granted.</p>
+    <!-- Hint Bar -->
+    <div id="hint-bar" class="hint-banner py-2 px-4 text-center hidden">
+        <p class="text-[10px] uppercase font-bold text-blue-400 tracking-widest mb-0.5">Mission Intel</p>
+        <p id="hint-text" class="text-sm font-semibold text-white">Hint locked...</p>
+    </div>
+
+    <!-- UI Components -->
+    <div id="toast" class="fixed top-8 left-1/2 -translate-x-1/2 bg-white text-black px-6 py-3 rounded-2xl font-bold shadow-2xl z-[1000] opacity-0 pointer-events-none transition-all duration-300"></div>
+
+    <div id="start-overlay" class="full-overlay">
+        <h2 id="start-title" class="text-4xl font-black text-white mb-2 uppercase">Ready</h2>
+        <p id="start-desc" class="text-zinc-400 mb-8 max-w-sm text-sm">Sequence locked. 5 minutes. 5 attempts.</p>
+        <button onclick="beginGameplay()" class="px-12 py-4 bg-blue-600 text-white font-black rounded-2xl hover:scale-105 active:scale-95 transition-all">START ROUND</button>
+    </div>
+
+    <!-- Power-up -->
+    <div id="powerup-container">
+        <div id="scan-powerup" class="powerup-btn" title="Reveal a letter">
+            <span class="text-2xl">📡</span>
+            <div id="powerup-charge-dots" class="absolute -right-2 top-0 flex flex-col gap-1">
+                <div class="w-1.5 h-1.5 rounded-full bg-zinc-700"></div>
+                <div class="w-1.5 h-1.5 rounded-full bg-zinc-700"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tournament Hub -->
+    <div id="tournament-hub-overlay" class="full-overlay">
+        <div class="bg-[#111118] p-8 rounded-[32px] border border-purple-500/30 w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh]">
+            <h2 class="text-3xl font-black mb-1 text-white italic tracking-tighter">TOURNAMENT HUB</h2>
+            <p class="text-purple-400 text-sm mb-6 font-bold uppercase tracking-widest">2 Games Per Team • High Stakes Scoring</p>
             
-            <div class="vacation-pass shadow-2xl shadow-emerald-500/40 mb-10">
-                <div class="flex justify-between items-start mb-8">
-                    <div>
-                        <p class="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">WP Employment Rewards</p>
-                        <h3 class="text-2xl font-black">VACATION PASS</h3>
-                    </div>
-                    <div class="bg-emerald-500 text-white px-4 py-1 rounded-full text-[10px] font-black">VALIDATED</div>
-                </div>
-                <div class="border-t-2 border-zinc-100 pt-6">
-                    <p class="text-[10px] text-zinc-400 font-black mb-2 uppercase">Privilege Granted:</p>
-                    <p class="text-xl font-black leading-tight text-zinc-900">One (1) Automatic Approved Leave</p>
-                    <p class="text-xs text-zinc-500 mt-2 italic">Reason for leave: "I won Wordle Pro."</p>
-                </div>
-                <div class="mt-10 flex justify-between items-end">
-                    <div>
-                        <div class="text-[8px] text-zinc-400 font-mono">AUTH: 0x77-VAC-PRO-99</div>
-                        <div class="text-[8px] text-zinc-400 font-mono">EXPIRY: NEVER</div>
-                    </div>
-                    <div class="w-14 h-14 bg-zinc-900 rounded flex items-center justify-center font-black text-white text-[8px] text-center p-2">STAMP HERE</div>
+            <div id="tourney-setup-section" class="mb-6">
+                <div class="flex gap-2">
+                    <input type="text" id="new-team-input" placeholder="Team Name..." class="flex-1 bg-black border border-white/10 p-4 rounded-xl text-white outline-none focus:border-purple-500">
+                    <button onclick="addTournamentTeam()" class="bg-purple-600 text-white px-8 rounded-xl font-bold hover:bg-purple-500">ADD</button>
                 </div>
             </div>
 
-            <button onclick="closeReveal()" class="px-12 py-4 bg-emerald-500 text-white font-black rounded-2xl transition-all hover:bg-emerald-400 hover:scale-105 active:scale-95 shadow-xl shadow-emerald-500/30">
-                CLAIM ANOTHER
-            </button>
-        </div>
-    </div>
-
-    <!-- Prize Preview Overlay -->
-    <div id="preview-overlay">
-        <div class="p-8 flex flex-col items-center">
-            <h2 class="text-2xl font-black text-amber-500 mb-6 uppercase tracking-widest">Motivation Check</h2>
-            <div class="vacation-pass opacity-50 grayscale scale-90 mb-8">
-                 <div class="flex justify-between items-start mb-8">
-                    <div>
-                        <p class="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">WP Employment Rewards</p>
-                        <h3 class="text-2xl font-black">VACATION PASS</h3>
-                    </div>
-                    <div class="bg-zinc-200 text-zinc-400 px-4 py-1 rounded-full text-[10px] font-black">LOCKED</div>
-                </div>
-                <div class="border-t-2 border-zinc-100 pt-6">
-                    <p class="text-[10px] text-zinc-400 font-black mb-2 uppercase">Locked Benefit:</p>
-                    <p class="text-xl font-black leading-tight text-zinc-400">1x Automatic Approved Leave</p>
-                </div>
+            <div class="flex-1 overflow-y-auto mb-6 pr-2 custom-scrollbar">
+                <table class="w-full text-left text-sm text-zinc-300">
+                    <thead class="text-[10px] uppercase bg-black text-zinc-500 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-3">Team</th>
+                            <th class="px-4 py-3 text-center">Round 1</th>
+                            <th class="px-4 py-3 text-center">Round 2</th>
+                            <th class="px-4 py-3 text-right">Total Score</th>
+                            <th class="px-4 py-3 w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tourney-teams-list" class="divide-y divide-white/5"></tbody>
+                </table>
             </div>
-            <p class="text-zinc-500 mb-8 max-w-xs">Solve the puzzle within 5 minutes to unlock this pass. No manager signature required.</p>
-            <button id="close-preview" class="px-10 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition">BACK TO GAME</button>
+
+            <div class="flex gap-4 pt-4 border-t border-white/10">
+                <button onclick="cancelTournament()" class="flex-1 py-4 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase text-[10px]">Reset All</button>
+                <button id="start-next-tourney-btn" onclick="advanceTournament()" class="flex-[2] py-4 bg-purple-600 text-white rounded-xl font-black shadow-xl shadow-purple-500/30 uppercase text-xs">
+                    Start Tournament
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- Loss Overlay -->
-    <div id="reveal-overlay">
-        <div class="p-8 text-center animate-in fade-in zoom-in duration-500">
-            <span class="text-red-500 font-black tracking-[0.3em] uppercase text-xs mb-4 block">Opportunity Expired</span>
-            <h2 class="text-zinc-500 text-xl font-medium mb-2">The word you missed was</h2>
-            <div class="reveal-word mb-12" id="revealed-word-text">WORD</div>
-            <button onclick="closeReveal()" class="px-12 py-4 bg-white text-black font-black rounded-2xl transition-all hover:scale-105 active:scale-95">
-                TRY AGAIN
-            </button>
-        </div>
-    </div>
-
-    <!-- Custom Modal -->
-    <div id="custom-modal" class="modal hidden fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div class="bg-[#16161d] p-8 rounded-[32px] border border-white/10 w-full max-w-md shadow-2xl">
-            <h2 class="text-3xl font-black mb-1 text-center text-white">STAKE A LEAVE</h2>
-            <p class="text-zinc-500 text-center text-sm mb-8 font-medium">Create a high-stakes puzzle for a friend</p>
+    <!-- Win/Loss Modals -->
+    <div id="win-overlay" class="full-overlay">
+        <div class="p-8 flex flex-col items-center w-full">
+            <div id="win-icon" class="text-emerald-400 text-6xl mb-4 drop-shadow-lg">🏆</div>
+            <div id="fail-icon" class="hidden text-red-500 text-6xl mb-4 drop-shadow-lg">⚠️</div>
+            <h2 id="win-title" class="text-4xl font-black mb-2 text-white uppercase tracking-tighter">SUCCESS</h2>
+            <p id="win-desc" class="text-zinc-400 mb-8 font-medium"></p>
             
-            <div class="space-y-6">
-                <div class="space-y-2">
-                    <label class="text-[11px] font-bold text-blue-500 uppercase tracking-widest px-1">Winning Word</label>
-                    <input type="text" id="custom-word-input" placeholder="MYSTERY" class="w-full bg-zinc-900/50 border border-white/5 p-4 rounded-2xl text-center text-xl uppercase font-black text-white outline-none focus:border-blue-500 transition-all">
-                </div>
-                <div class="space-y-2">
-                    <label class="text-[11px] font-bold text-zinc-500 uppercase tracking-widest px-1">First Clue</label>
-                    <input type="text" id="custom-clue1-input" placeholder="Start here..." class="w-full bg-zinc-900/50 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-blue-500 text-white transition-all">
-                </div>
-                <div class="space-y-2">
-                    <label class="text-[11px] font-bold text-purple-500 uppercase tracking-widest px-1">Panic Clue (Visible at 3:00)</label>
-                    <input type="text" id="custom-clue2-input" placeholder="Final hint..." class="w-full bg-zinc-900/50 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-purple-500 text-white transition-all">
+            <!-- AMAZING VACATION PASS -->
+            <div id="grand-prize-card" class="hidden vacation-pass-container mb-10">
+                <div class="vacation-pass">
+                    <div class="pass-header">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-black text-xs">W</div>
+                            <span class="font-black tracking-widest text-sm italic">PRIORITY PASS</span>
+                        </div>
+                        <div class="text-[10px] font-bold text-blue-400 bg-blue-400/10 px-3 py-1 rounded-full uppercase">First Class</div>
+                    </div>
+                    
+                    <div class="pass-body">
+                        <div class="grid grid-cols-2 gap-6 mb-4">
+                            <div>
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Passenger Name</p>
+                                <p id="pass-winner-name" class="text-lg font-black text-slate-900 uppercase">CHAMPION</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Gate</p>
+                                <p class="text-lg font-black text-slate-900 uppercase">A-1</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Destination</p>
+                                <p class="text-lg font-black text-slate-900 uppercase">APPROVED LEAVE</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</p>
+                                <p class="text-lg font-black text-emerald-600 uppercase">VALIDATED</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pass-divider">
+                        <div class="pass-cutout cutout-left"></div>
+                        <div class="pass-cutout cutout-right"></div>
+                    </div>
+
+                    <div class="pass-body flex items-center justify-between pt-2">
+                        <div>
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Authentication Key</p>
+                            <p class="text-xs font-mono font-bold text-slate-500">WD-2024-X-99</p>
+                        </div>
+                        <div class="barcode text-slate-900">||||| || ||| ||||</div>
+                    </div>
                 </div>
             </div>
             
-            <div class="flex gap-4 mt-10">
-                <button id="cancel-custom" class="flex-1 py-4 bg-zinc-800 text-zinc-400 rounded-2xl font-bold hover:bg-zinc-700 transition">Cancel</button>
-                <button id="generate-link" class="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-500 transition shadow-xl shadow-blue-500/30">Generate Link</button>
+            <button id="win-action-btn" class="px-12 py-4 bg-emerald-500 text-white font-black rounded-2xl hover:scale-105 transition shadow-2xl">CONTINUE</button>
+        </div>
+    </div>
+
+    <!-- Custom Challenge -->
+    <div id="custom-modal" class="full-overlay" style="background: rgba(0,0,0,0.9);">
+        <div class="bg-[#16161d] p-8 rounded-[32px] border border-white/10 w-full max-w-md">
+            <h2 id="modal-title" class="text-3xl font-black mb-1 text-center text-white italic">GAME MASTER</h2>
+            <p id="modal-subtitle" class="text-zinc-500 text-center text-sm mb-6 font-medium">Set the secret word and clues</p>
+            
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label class="text-[10px] text-zinc-500 font-bold uppercase ml-2 mb-1 block">Secret Word</label>
+                    <input type="text" id="custom-word-input" placeholder="MYSTERY" class="w-full bg-zinc-900 border border-white/5 p-4 rounded-2xl text-center text-xl uppercase font-black text-white outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="text-[10px] text-zinc-500 font-bold uppercase ml-2 mb-1 block">Clue 1 (Start)</label>
+                    <input type="text" id="clue1-input" placeholder="e.g. It's a fruit" class="w-full bg-zinc-900 border border-white/5 p-3 rounded-xl text-white outline-none focus:border-blue-500 text-sm">
+                </div>
+                <div>
+                    <label class="text-[10px] text-zinc-500 font-bold uppercase ml-2 mb-1 block">Clue 2 (at 2 mins left)</label>
+                    <input type="text" id="clue2-input" placeholder="e.g. It's yellow" class="w-full bg-zinc-900 border border-white/5 p-3 rounded-xl text-white outline-none focus:border-blue-500 text-sm">
+                </div>
+            </div>
+
+            <div class="flex gap-4">
+                <button id="cancel-custom" class="flex-1 py-4 bg-zinc-800 text-zinc-400 rounded-2xl font-bold">Cancel</button>
+                <button id="generate-link" class="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-xl shadow-blue-500/30">LOCK CHALLENGE</button>
             </div>
         </div>
     </div>
 
-    <main class="flex-grow flex items-center justify-center overflow-hidden py-6">
+    <main class="flex-grow flex items-center justify-center overflow-hidden py-6 mt-2">
         <div id="grid-container" class="flex flex-col gap-3 px-4"></div>
     </main>
-
     <div id="keyboard" class="max-w-[550px] w-full mx-auto px-4 pb-12 flex flex-col gap-2.5"></div>
 
-    <div id="toast"></div>
-
     <script>
-        const WORDS = ["react", "coded", "logic", "world", "pixel", "graph", "space", "frame", "swift", "cloud", "array", "mount", "study", "input", "write", "plant", "water", "stone", "light", "house", "bread", "train", "phone", "music", "night", "beach", "earth", "paper", "smile", "heart"];
-        
-        let targetWord = "";
-        let clue1 = "";
-        let clue2 = "";
-        let currentGuess = "";
-        let guesses = [];
-        let gameOver = false;
-        let wordLength = 5;
-        let timeLeft = 300; 
-        let timerInterval = null;
-        let audioCtx = null;
+        const WORDS = ["react", "coded", "logic", "world", "pixel", "graph", "space", "frame", "swift", "cloud", "array", "mount", "study", "input", "write", "plant", "water", "stone", "light", "house"];
+        let targetWord = "", currentGuess = "", guesses = [], gameOver = false, gameStarted = false;
+        let wordLength = 5, timeLeft = 300, timerInterval = null, scanCharge = 0;
+        let clue1 = "", clue2 = "";
+
+        // Tournament State
+        let tourneyActive = false;
+        let tourneyTeams = [];
+        let tourneyCurrentIdx = -1;
 
         const gridContainer = document.getElementById('grid-container');
         const keyboardElement = document.getElementById('keyboard');
-        const toastElement = document.getElementById('toast');
         const customModal = document.getElementById('custom-modal');
         const customInput = document.getElementById('custom-word-input');
-        const customClue1Input = document.getElementById('custom-clue1-input');
-        const customClue2Input = document.getElementById('custom-clue2-input');
         const timerDisplay = document.getElementById('timer-display');
-        const revealOverlay = document.getElementById('reveal-overlay');
+        const startOverlay = document.getElementById('start-overlay');
+        const tourneyHubOverlay = document.getElementById('tournament-hub-overlay');
         const winOverlay = document.getElementById('win-overlay');
-        const previewOverlay = document.getElementById('preview-overlay');
-        const revealedWordText = document.getElementById('revealed-word-text');
-        const clue1Row = document.getElementById('clue1-row');
-        const clue1Text = document.getElementById('clue1-text');
-        const clue2Row = document.getElementById('clue2-row');
-        const clue2Text = document.getElementById('clue2-text');
+        const activeTourneyBadge = document.getElementById('active-tourney-badge');
+        const winIcon = document.getElementById('win-icon');
+        const failIcon = document.getElementById('fail-icon');
+        const grandPrizeCard = document.getElementById('grand-prize-card');
+        const winActionBtn = document.getElementById('win-action-btn');
+        const hintBar = document.getElementById('hint-bar');
+        const hintText = document.getElementById('hint-text');
 
-        const keyboardRows = [
-            ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-            ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-            ['enter', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'backspace'],
-            ['space']
-        ];
-
-        function playPanicSound(remaining) {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (remaining > 30 || remaining <= 0) return;
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.frequency.setValueAtTime(220 + ((30 - remaining) * 15), audioCtx.currentTime);
-            osc.type = 'sine';
-            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.15);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.15);
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.style.opacity = '1';
+            setTimeout(() => t.style.opacity = '0', 3000);
         }
 
         function startTimer() {
-            if (timerInterval) clearInterval(timerInterval);
+            clearInterval(timerInterval);
             timeLeft = 300;
-            updateTimerDisplay();
             timerInterval = setInterval(() => {
-                if (gameOver) { clearInterval(timerInterval); return; }
+                if (gameOver) return;
                 timeLeft--;
-                updateTimerDisplay();
-                if (timeLeft <= 30) {
-                    playPanicSound(timeLeft);
-                    timerDisplay.parentElement.style.borderColor = '#ef4444';
-                    timerDisplay.style.color = '#ef4444';
+                
+                // Safety floor
+                if (timeLeft < 0) timeLeft = 0;
+
+                const m = Math.floor(timeLeft/60), s = timeLeft%60;
+                timerDisplay.textContent = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                
+                if (timeLeft <= 120 && clue2 && !hintText.classList.contains('clue-2-active')) {
+                    hintText.textContent = `HINT: ${clue2}`;
+                    hintText.classList.add('animate-pulse', 'text-amber-400', 'clue-2-active');
+                    setTimeout(() => hintText.classList.remove('animate-pulse'), 3000);
+                    showToast("NEW CLUE UNLOCKED!");
                 }
-                if (timeLeft === 180 && clue2 && clue2Row.classList.contains('hidden')) {
-                    clue2Row.classList.remove('hidden');
-                    showToast("Panic Clue Unlocked!");
-                }
-                if (timeLeft <= 0) { clearInterval(timerInterval); handleTimeOut(); }
+
+                if(timeLeft <= 0) handleEnd(false);
             }, 1000);
         }
 
-        function updateTimerDisplay() {
-            const minutes = Math.floor(timeLeft / 60);
-            const seconds = timeLeft % 60;
-            timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        function beginGameplay() {
+            startOverlay.style.display = 'none';
+            gameStarted = true;
+            hintBar.classList.remove('hidden');
+            hintText.classList.remove('clue-2-active', 'text-amber-400');
+            hintText.textContent = clue1 ? `HINT: ${clue1}` : "Solve the word...";
+            startTimer();
         }
 
-        function handleTimeOut() {
-            gameOver = true;
-            revealedWordText.textContent = targetWord;
-            revealOverlay.style.display = 'flex';
-        }
-
-        function closeReveal() {
-            revealOverlay.style.display = 'none';
-            winOverlay.style.display = 'none';
-            window.location.hash = "";
-            initGame();
-        }
-
-        function initGame() {
-            const hash = window.location.hash.substring(1);
-            if (hash) {
-                try {
-                    const data = JSON.parse(atob(hash));
-                    targetWord = data.word.toLowerCase();
-                    clue1 = data.clue1 || "";
-                    clue2 = data.clue2 || "";
-                } catch(e) { targetWord = WORDS[Math.floor(Math.random() * WORDS.length)]; }
-            } else { targetWord = WORDS[Math.floor(Math.random() * WORDS.length)]; }
-
-            clue1Row.classList.toggle('hidden', !clue1);
-            clue1Text.textContent = clue1;
-            clue2Row.classList.add('hidden');
-            clue2Text.textContent = clue2;
-
-            wordLength = targetWord.length;
-            currentGuess = "";
-            guesses = [];
-            gameOver = false;
-            timerDisplay.parentElement.style.borderColor = 'var(--glass-border)';
-            timerDisplay.style.color = 'inherit';
+        function prepNewGame(data) {
+            targetWord = (data?.word || WORDS[Math.floor(Math.random()*WORDS.length)]).toLowerCase();
+            clue1 = data?.c1 || "";
+            clue2 = data?.c2 || "";
             
+            wordLength = targetWord.length;
+            currentGuess = ""; guesses = []; gameOver = false; gameStarted = false; scanCharge = 0;
+            timeLeft = 300;
+            timerDisplay.textContent = "05:00";
+            updatePowerups();
+            hintBar.classList.add('hidden');
+            
+            if(tourneyActive) {
+                const team = tourneyTeams[tourneyCurrentIdx];
+                document.getElementById('start-title').textContent = `${team.name} - GAME ${team.currentRound}`;
+                document.getElementById('start-desc').textContent = "Game Master has set the word and clues.";
+                activeTourneyBadge.classList.remove('hidden');
+            } else {
+                document.getElementById('start-title').textContent = "SYSTEM READY";
+                activeTourneyBadge.classList.add('hidden');
+            }
+
+            startOverlay.style.display = 'flex';
             gridContainer.innerHTML = '';
-            for (let i = 0; i < 6; i++) {
-                const row = document.createElement('div');
-                row.className = 'flex gap-3 justify-center';
+            for (let i = 0; i < 5; i++) {
+                const row = document.createElement('div'); row.className = 'flex gap-3 justify-center';
                 for (let j = 0; j < wordLength; j++) {
-                    const tile = document.createElement('div');
-                    tile.className = 'tile';
+                    const tile = document.createElement('div'); tile.className = 'tile';
                     if (targetWord[j] === ' ') tile.classList.add('space-tile');
-                    tile.id = `tile-${i}-${j}`;
-                    row.appendChild(tile);
+                    tile.id = `tile-${i}-${j}`; row.appendChild(tile);
                 }
                 gridContainer.appendChild(row);
             }
             renderKeyboard();
-            startTimer();
         }
 
         function renderKeyboard() {
             keyboardElement.innerHTML = '';
-            keyboardRows.forEach(rowKeys => {
-                const row = document.createElement('div');
-                row.className = 'flex justify-center gap-2 w-full';
-                rowKeys.forEach(key => {
-                    const keyBtn = document.createElement('div');
-                    keyBtn.className = `key ${key.length > 5 ? 'px-6 flex-[1.5]' : 'flex-1'}`;
-                    keyBtn.textContent = key === 'backspace' ? '⌫' : key;
-                    keyBtn.id = `key-${key}`;
-                    keyBtn.onclick = () => handleInput(key);
-                    row.appendChild(keyBtn);
+            [['q','w','e','r','t','y','u','i','o','p'],['a','s','d','f','g','h','j','k','l'],['enter','z','x','c','v','b','n','m','backspace']].forEach(keys => {
+                const row = document.createElement('div'); row.className = 'flex justify-center gap-2 w-full';
+                keys.forEach(k => {
+                    const b = document.createElement('div'); b.className = `key ${k.length > 5 ? 'px-6 flex-[1.5]' : 'flex-1'}`;
+                    b.textContent = k === 'backspace' ? '⌫' : k; b.id = `key-${k}`;
+                    b.onclick = () => handleInput(k); row.appendChild(b);
                 });
                 keyboardElement.appendChild(row);
             });
         }
 
-        function showToast(message) {
-            toastElement.textContent = message;
-            toastElement.classList.add('visible');
-            setTimeout(() => toastElement.classList.remove('visible'), 3000);
+        function handleInput(key) {
+            if (!gameStarted || gameOver) return;
+            key = key.toLowerCase();
+            if (key === 'enter') submitGuess();
+            else if (key === 'backspace') { currentGuess = currentGuess.slice(0,-1); updateGrid(); }
+            else if (/^[a-z ]$/.test(key) && currentGuess.length < wordLength) { currentGuess += key; updateGrid(); }
         }
 
-        function handleInput(key) {
-            if (gameOver || !customModal.classList.contains('hidden')) return;
-            if (audioCtx?.state === 'suspended') audioCtx.resume();
-            const cleanKey = key.toLowerCase();
-            if (cleanKey === 'enter') submitGuess();
-            else if (cleanKey === 'backspace') {
-                if (currentGuess.length > 0) { currentGuess = currentGuess.slice(0, -1); updateGrid(); }
-            } else if (cleanKey === ' ' || cleanKey === 'space') {
-                if (currentGuess.length < wordLength) { currentGuess += " "; updateGrid(); }
-            } else if (/^[a-z]$/.test(cleanKey)) {
-                if (currentGuess.length < wordLength) { currentGuess += cleanKey; updateGrid(); }
-            }
-        }
+        window.addEventListener('keydown', (e) => {
+            if(document.activeElement.tagName === 'INPUT') return;
+            if (e.key === 'Enter') handleInput('enter');
+            else if (e.key === 'Backspace') handleInput('backspace');
+            else if (/^[a-zA-Z]$/.test(e.key)) handleInput(e.key);
+        });
 
         function updateGrid() {
-            const rowIdx = guesses.length;
             for (let i = 0; i < wordLength; i++) {
-                const tile = document.getElementById(`tile-${rowIdx}-${i}`);
-                if (!tile) continue;
-                const char = currentGuess[i] || "";
-                tile.textContent = tile.classList.contains('space-tile') ? (char === " " ? "" : char) : char;
-                tile.setAttribute('data-state', char ? 'active' : '');
+                const t = document.getElementById(`tile-${guesses.length}-${i}`);
+                if (t) { t.textContent = currentGuess[i] || ""; t.setAttribute('data-state', currentGuess[i] ? 'active' : ''); }
             }
         }
 
         function submitGuess() {
             if (currentGuess.length !== wordLength) return;
-            const rowIdx = guesses.length;
-            const result = checkGuess(currentGuess, targetWord);
-            
-            for (let i = 0; i < wordLength; i++) {
-                const tile = document.getElementById(`tile-${rowIdx}-${i}`);
-                setTimeout(() => {
-                    tile.classList.add('flip');
-                    setTimeout(() => {
-                        tile.classList.add(result[i]);
-                        if (currentGuess[i] !== " ") updateKeyboard(currentGuess[i], result[i]);
-                    }, 300);
-                }, i * 80);
-            }
+            const res = Array(wordLength).fill('absent'), targetArr = targetWord.split(''), guessArr = currentGuess.split('');
+            guessArr.forEach((c,i) => { if(c === targetArr[i]) { res[i] = 'correct'; targetArr[i] = null; guessArr[i] = null; } });
+            guessArr.forEach((c,i) => { if(c && targetArr.includes(c)) { res[i] = 'present'; targetArr[targetArr.indexOf(c)] = null; } });
 
-            guesses.push(currentGuess);
-            const guessCopy = currentGuess;
-            currentGuess = "";
-            
+            res.forEach((s, i) => {
+                const t = document.getElementById(`tile-${guesses.length}-${i}`);
+                setTimeout(() => { t.classList.add('flip'); setTimeout(() => { t.classList.add(s); updateKey(currentGuess[i], s); }, 300); }, i*80);
+            });
+
+            if (res.includes('correct')) { 
+                scanCharge = Math.min(2, scanCharge + 1); 
+                updatePowerups(); 
+            }
+            const win = currentGuess === targetWord;
+            guesses.push(currentGuess); currentGuess = "";
+
             setTimeout(() => {
-                if (guessCopy === targetWord) { winOverlay.style.display = 'flex'; gameOver = true; }
-                else if (guesses.length === 6) handleTimeOut();
-            }, wordLength * 80 + 500);
+                if (win) handleEnd(true);
+                else if (guesses.length === 5) handleEnd(false);
+            }, wordLength*80 + 500);
         }
 
-        function checkGuess(guess, target) {
-            const result = Array(wordLength).fill('absent');
-            const targetArr = target.split('');
-            const guessArr = guess.split('');
-            for (let i = 0; i < wordLength; i++) {
-                if (guessArr[i] === targetArr[i]) { result[i] = 'correct'; targetArr[i] = null; guessArr[i] = null; }
-            }
-            for (let i = 0; i < wordLength; i++) {
-                if (guessArr[i] && guessArr[i] !== " " && targetArr.includes(guessArr[i])) {
-                    result[i] = 'present';
-                    targetArr[targetArr.indexOf(guessArr[i])] = null;
+        function updateKey(c, s) {
+            const k = document.getElementById(`key-${c}`);
+            if (k && !k.classList.contains('correct')) { k.classList.remove('present','absent'); k.classList.add(s); }
+        }
+
+        function handleEnd(won) {
+            gameOver = true; clearInterval(timerInterval);
+            winIcon.classList.add('hidden'); failIcon.classList.add('hidden');
+            grandPrizeCard.classList.add('hidden');
+            winActionBtn.className = "px-12 py-4 text-white font-black rounded-2xl hover:scale-105 transition shadow-2xl";
+
+            if (tourneyActive) {
+                processTourneyResult(won);
+            } else {
+                if (won) {
+                    winIcon.classList.remove('hidden');
+                    document.getElementById('win-title').textContent = "SUCCESS";
+                    document.getElementById('win-desc').textContent = "Priority Pass Validated";
+                    document.getElementById('pass-winner-name').textContent = "ELITE CHAMPION";
+                    grandPrizeCard.classList.remove('hidden');
+                    winActionBtn.classList.add('bg-emerald-500');
+                } else {
+                    failIcon.classList.remove('hidden');
+                    document.getElementById('win-title').textContent = "FAILED";
+                    document.getElementById('win-desc').textContent = `The word was ${targetWord.toUpperCase()}`;
+                    winActionBtn.classList.add('bg-red-600');
                 }
+                winActionBtn.onclick = () => { winOverlay.style.display = 'none'; prepNewGame(); };
+                winOverlay.style.display = 'flex';
             }
-            return result;
         }
 
-        function updateKeyboard(char, state) {
-            const keyBtn = document.getElementById(`key-${char}`);
-            if (!keyBtn || keyBtn.classList.contains('correct')) return;
-            keyBtn.classList.remove('absent', 'present');
-            keyBtn.classList.add(state);
+        function addTournamentTeam() {
+            const name = document.getElementById('new-team-input').value.trim();
+            if(!name) return;
+            tourneyTeams.push({ name, g1Score: 0, g2Score: 0, total: 0, currentRound: 1 });
+            document.getElementById('new-team-input').value = "";
+            renderTourneyHub();
         }
 
-        document.getElementById('custom-btn').onclick = () => customModal.classList.remove('hidden');
-        document.getElementById('cancel-custom').onclick = () => customModal.classList.add('hidden');
-        document.getElementById('preview-prize-btn').onclick = () => previewOverlay.style.display = 'flex';
-        document.getElementById('close-preview').onclick = () => previewOverlay.style.display = 'none';
-        
-        document.getElementById('generate-link').onclick = () => {
+        function renderTourneyHub() {
+            const list = document.getElementById('tourney-teams-list');
+            list.innerHTML = '';
+            [...tourneyTeams].sort((a,b) => b.total - a.total).forEach((t, i) => {
+                list.innerHTML += `
+                    <tr class="hover:bg-white/5">
+                        <td class="px-4 py-3 font-bold text-white">${t.name}</td>
+                        <td class="px-4 py-3 text-center ${t.g1Score > 0 ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">${t.g1Score || '-'}</td>
+                        <td class="px-4 py-3 text-center ${t.g2Score > 0 ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">${t.g2Score || '-'}</td>
+                        <td class="px-4 py-3 text-right font-black text-amber-400">${t.total}</td>
+                        <td class="px-4 py-3 text-right">
+                            ${!tourneyActive ? `<button onclick="tourneyTeams.splice(${i},1);renderTourneyHub();" class="text-red-500">✕</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+            document.getElementById('start-next-tourney-btn').textContent = tourneyActive ? (tourneyCurrentIdx >= tourneyTeams.length-1 && tourneyTeams[tourneyCurrentIdx].currentRound === 2 ? "FINISH TOURNAMENT" : "NEXT ROUND") : "START TOURNAMENT";
+        }
+
+        function advanceTournament() {
+            if (!tourneyActive) { if(tourneyTeams.length < 1) return; tourneyActive = true; tourneyCurrentIdx = 0; }
+            else {
+                const team = tourneyTeams[tourneyCurrentIdx];
+                if (team.currentRound === 1) { team.currentRound = 2; }
+                else if (tourneyCurrentIdx < tourneyTeams.length - 1) { tourneyCurrentIdx++; }
+                else { crownWinner(); return; }
+            }
+            tourneyHubOverlay.style.display = 'none';
+            openGM();
+        }
+
+        function openGM() {
+            document.getElementById('modal-title').textContent = "GAME MASTER";
+            document.getElementById('modal-subtitle').textContent = `Set challenge for ${tourneyTeams[tourneyCurrentIdx]?.name || '1v1'}`;
+            customModal.style.display = 'flex';
+            customInput.value = ""; 
+            document.getElementById('clue1-input').value = "";
+            document.getElementById('clue2-input').value = "";
+            customInput.focus();
+        }
+
+        function processTourneyResult(won) {
+            let score = 0;
+            if(won) score = 1000 + ((5 - guesses.length) * 500) + (timeLeft * 10);
+            const team = tourneyTeams[tourneyCurrentIdx];
+            if (team.currentRound === 1) team.g1Score = score; else team.g2Score = score;
+            team.total = team.g1Score + team.g2Score;
+
+            if (won) {
+                winIcon.classList.remove('hidden');
+                document.getElementById('win-title').textContent = "ROUND COMPLETE";
+                document.getElementById('win-desc').textContent = `${team.name} earned ${score} points.`;
+                winActionBtn.classList.add('bg-emerald-500');
+            } else {
+                failIcon.classList.remove('hidden');
+                document.getElementById('win-title').textContent = "ROUND FAILED";
+                document.getElementById('win-desc').textContent = `${team.name} failed this round. Score: 0`;
+                winActionBtn.classList.add('bg-red-600');
+            }
+            winActionBtn.onclick = () => { winOverlay.style.display = 'none'; tourneyHubOverlay.style.display = 'flex'; renderTourneyHub(); };
+            winOverlay.style.display = 'flex';
+        }
+
+        function crownWinner() {
+            const winner = [...tourneyTeams].sort((a,b) => b.total - a.total)[0];
+            winIcon.classList.add('hidden'); failIcon.classList.add('hidden');
+            grandPrizeCard.classList.add('hidden');
+            winActionBtn.className = "px-12 py-4 bg-amber-500 text-white font-black rounded-2xl hover:scale-105 transition shadow-2xl";
+
+            winIcon.classList.remove('hidden');
+            document.getElementById('win-title').textContent = "TOURNAMENT CHAMPION";
+            document.getElementById('win-desc').textContent = `${winner.name} wins with ${winner.total} points!`;
+            document.getElementById('pass-winner-name').textContent = winner.name;
+            grandPrizeCard.classList.remove('hidden');
+            
+            winActionBtn.onclick = () => { winOverlay.style.display = 'none'; cancelTournament(); };
+            winOverlay.style.display = 'flex';
+        }
+
+        function cancelTournament() { tourneyActive = false; tourneyTeams = []; tourneyCurrentIdx = -1; tourneyHubOverlay.style.display = 'none'; activeTourneyBadge.classList.add('hidden'); prepNewGame(); }
+
+        document.getElementById('tournament-btn').onclick = () => { tourneyHubOverlay.style.display = 'flex'; renderTourneyHub(); };
+        document.getElementById('custom-btn').onclick = () => { openGM(); tourneyActive = false; };
+        document.getElementById('generate-link').onclick = () => { 
             const word = customInput.value.toLowerCase().trim();
-            if (!word || !/^[a-z ]+$/.test(word)) { showToast("Letters & spaces only!"); return; }
-            const payload = btoa(JSON.stringify({ word, clue1: customClue1Input.value, clue2: customClue2Input.value }));
-            const fullUrl = window.location.origin + window.location.pathname + "#" + payload;
-            const tempInput = document.createElement("input");
-            document.body.appendChild(tempInput);
-            tempInput.value = fullUrl;
-            tempInput.select();
-            document.execCommand("copy");
-            document.body.removeChild(tempInput);
-            window.location.hash = payload;
-            customModal.classList.add('hidden');
-            initGame();
-            showToast("Prize Challenge Copied!");
+            const c1 = document.getElementById('clue1-input').value.trim();
+            const c2 = document.getElementById('clue2-input').value.trim();
+            if(!word || !/^[a-z ]+$/.test(word)) return;
+            customModal.style.display = 'none'; prepNewGame({word, c1, c2}); 
+        };
+        document.getElementById('cancel-custom').onclick = () => customModal.style.display = 'none';
+        
+        document.getElementById('scan-powerup').onclick = () => {
+            if(scanCharge < 2 || gameOver || !gameStarted) return;
+            const revealedIndices = [];
+            for(let g of guesses) {
+                g.split('').forEach((char, i) => { if(char === targetWord[i]) revealedIndices.push(i); });
+            }
+            const unrevealedIdx = targetWord.split('').findIndex((char, i) => char !== ' ' && !revealedIndices.includes(i));
+            if(unrevealedIdx !== -1) {
+                showToast(`SCAN: Position ${unrevealedIdx+1} is "${targetWord[unrevealedIdx].toUpperCase()}"`);
+                scanCharge = 0; updatePowerups();
+            }
         };
 
-        window.addEventListener('keydown', (e) => handleInput(e.key));
-        initGame();
+        function updatePowerups() {
+            const dots = document.getElementById('powerup-charge-dots').children;
+            for(let i=0; i<2; i++) {
+                dots[i].className = `w-1.5 h-1.5 rounded-full ${i < scanCharge ? 'bg-blue-500 shadow-lg' : 'bg-zinc-700'}`;
+            }
+            document.getElementById('scan-powerup').classList.toggle('ready', scanCharge >= 2);
+        }
+
+        prepNewGame();
     </script>
 </body>
 </html>
